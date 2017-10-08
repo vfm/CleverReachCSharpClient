@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Authentication;
 using System.Threading.Tasks;
 
 namespace CleverReachClient
@@ -9,16 +10,26 @@ namespace CleverReachClient
     {
         static void Main(string[] args)
         {
-            RunAsync().Wait();
+            var crclient = new CRClient();
+            RunAsync(crclient).Wait();
         }
 
-        private async static Task RunAsync()
+        private async static Task RunAsync(CRClient crclient)
         {
-            CRClient crclient = new CRClient(99999999, "username", "pa55w0rd");
-            GroupObj group = await crclient.CreateGroup("A_Group_Name_1");
-            
+            try
+            {
+                await crclient.LoginAsync(99999999, "username", "pa55w0rd");
+            }
+            catch (AuthenticationException)
+            {
+                Console.WriteLine("CleverReach Zugangsdaten sind falsch.");
+                Console.ReadLine();
+                return;
+            }
+            var group = await crclient.CreateGroup("A_Group_Name_1");
+
             Console.WriteLine($"ID der Gruppe: {group.id}");
-            
+
             Console.WriteLine($"Attribute anlegen:");
             for (int attrib_int = 1; attrib_int <= 40; attrib_int++)
             {

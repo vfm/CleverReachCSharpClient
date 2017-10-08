@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Authentication;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -11,28 +12,27 @@ namespace CleverReachClient
 {
     public class CRClient
     {
+        const string CLEVERREACH_API_URL = "https://rest.cleverreach.com/v2";
+
         /// <summary>
         /// int = groupID
         /// </summary>
         Dictionary<int, ICollection<AttributesObj>> attributeCache = new Dictionary<int, ICollection<AttributesObj>>();
         HttpClient client;
         string token = null;
-        const string CLEVERREACH_API_URL = "https://rest.cleverreach.com/v2";
 
-        public CRClient(int clientid, string username, string password)
+        public CRClient()
         {
             client = new HttpClient { BaseAddress = new Uri(CLEVERREACH_API_URL) };
             client.DefaultRequestHeaders.Accept.Clear();
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-            LoginAsync(clientid, username, password).Wait(); // Login
         }
 
         async Task<T> GetAsync<T>(string path)
         {
-            TokenRequired();
-
             T obj = default(T);
+            if (!TokenRequired()) return obj;
+
             HttpResponseMessage response = await client.GetAsync(path);
             if (response.IsSuccessStatusCode)
             {
@@ -53,15 +53,9 @@ namespace CleverReachClient
             return null;
         }
 
-        async Task LoginAsync(int client_id, string login, string password)
-        {
-            var Login = new LoginObj() { client_id = client_id, login = login, password = password };
-            token = await GetLoginAsync(Login);
-        }
-
         async Task<T> PostAsync<T>(string path, T obj)
         {
-            TokenRequired();
+            if (!TokenRequired()) return default(T);
 
             StringContent content = new StringContent(JsonConvert.SerializeObject(obj), Encoding.UTF8, "application/json");
 
@@ -76,7 +70,7 @@ namespace CleverReachClient
 
         async Task<string> PostAsyncString(string path, object obj)
         {
-            TokenRequired();
+            if (!TokenRequired()) return null;
 
             StringContent content = new StringContent(JsonConvert.SerializeObject(obj), Encoding.UTF8, "application/json");
 
@@ -91,12 +85,13 @@ namespace CleverReachClient
             return await GetAsync<ICollection<AttributesObj>>($"/attributes?group_id={group.id}");
         }
 
-        void TokenRequired()
+        bool TokenRequired()
         {
-            if (token == null) throw new ArgumentNullException(nameof(token));
+            if (token == null) return false;
 
             if (!client.DefaultRequestHeaders.TryGetValues("Authorization", out var tmp))
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            return true;
         }
 
         /// <summary>
@@ -148,6 +143,14 @@ namespace CleverReachClient
             if (group == null) // WENNS DIE GRUPPE NOCH NICHT GIBT
                 group = await PostAsync<GroupObj>("/groups", new GroupObj() { name = grpName }); // GRUPPE ANLEGEN
             return group;
+        }
+
+        public async Task LoginAsync(int client_id, string login, string password)
+        {
+            var Login = new LoginObj() { client_id = client_id, login = login, password = password };
+            token = await GetLoginAsync(Login);
+            if (token == null)
+                throw new AuthenticationException("CleverReach Zugangsdaten sind ungültig!");
         }
     }
 }
