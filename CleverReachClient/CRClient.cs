@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -13,6 +14,7 @@ namespace CleverReachClient
     public class CRClient
     {
         const string CLEVERREACH_API_URL = "https://rest.cleverreach.com/v2";
+        const string STR_Login = "/login";
 
         /// <summary>
         /// int = groupID
@@ -40,17 +42,13 @@ namespace CleverReachClient
                 if (result == "false")
                     return obj;
                 else
-                    obj = await response.Content.ReadAsAsync<T>();
+                {
+                    //obj = await response.Content.ReadAsAsync<T>();
+                    using (Stream responseStream = await response.Content.ReadAsStreamAsync())
+                        return JsonConvert.DeserializeObject<T>(new StreamReader(responseStream).ReadToEnd());
+                }
             }
             return obj;
-        }
-
-        async Task<string> GetLoginAsync(LoginObj login)
-        {
-            HttpResponseMessage response = await client.PostAsJsonAsync("login", login);
-            if (response.IsSuccessStatusCode)
-                return await response.Content.ReadAsAsync<string>();
-            return null;
         }
 
         async Task<T> PostAsync<T>(string path, T obj)
@@ -70,7 +68,7 @@ namespace CleverReachClient
 
         async Task<string> PostAsyncString(string path, object obj)
         {
-            if (!TokenRequired()) return null;
+            if (path != STR_Login && !TokenRequired()) return null;
 
             StringContent content = new StringContent(JsonConvert.SerializeObject(obj), Encoding.UTF8, "application/json");
 
@@ -90,7 +88,7 @@ namespace CleverReachClient
             if (token == null) return false;
 
             if (!client.DefaultRequestHeaders.TryGetValues("Authorization", out var tmp))
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.Trim(new char[] { '"' }));
             return true;
         }
 
@@ -148,7 +146,8 @@ namespace CleverReachClient
         public async Task LoginAsync(int client_id, string login, string password)
         {
             var Login = new LoginObj() { client_id = client_id, login = login, password = password };
-            token = await GetLoginAsync(Login);
+            //token = await GetLoginAsync(Login);
+            token = await PostAsyncString(STR_Login, Login);
             if (token == null)
                 throw new AuthenticationException("CleverReach Zugangsdaten sind ungültig!");
         }
